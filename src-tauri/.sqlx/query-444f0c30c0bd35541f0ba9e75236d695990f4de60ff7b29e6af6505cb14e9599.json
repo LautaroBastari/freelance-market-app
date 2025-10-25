@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO stock_mov\n               (id_producto, cantidad_delta, motivo, referencia, fecha_hora)\n               VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "444f0c30c0bd35541f0ba9e75236d695990f4de60ff7b29e6af6505cb14e9599"
+}

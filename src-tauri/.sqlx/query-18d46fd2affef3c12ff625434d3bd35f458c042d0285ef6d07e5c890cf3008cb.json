@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT stock_actual as \"stock_actual!: i64\"\n           FROM producto_stock WHERE id_producto = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "stock_actual!: i64",
+        "ordinal": 0,
+        "type_info": "Int64"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "18d46fd2affef3c12ff625434d3bd35f458c042d0285ef6d07e5c890cf3008cb"
+}
