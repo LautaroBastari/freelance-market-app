@@ -1,38 +1,30 @@
 use tauri::Manager;
-use std::{fs, path::PathBuf, sync::{Arc, Mutex}};
-use sqlx::SqlitePool;
+use std::sync::{Arc, Mutex};
 
-// módulos externos (cada uno apunta a archivos/carpeta en src/)
+// módulos externos
 mod app_state;
 mod db;
 mod users { pub mod model; pub mod crypto; pub mod repo; pub mod commands; pub mod auth; }
 mod ventas;
 mod caja;
 mod stock;
+
 // === Imports de estructuras expuestas ===
 use app_state::AppState;
 use users::auth::AuthState;
-use caja::commands;
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
-            // Crear carpeta local de datos
-            let data_dir: PathBuf = app
-                .path()
-                .app_data_dir()
-                .expect("sin app_data_dir");
-            fs::create_dir_all(&data_dir).expect("no se pudo crear app data dir");
+            // 1) Obtené el AppHandle
+            let handle = app.handle();
 
-            // Crear/conectar base de datos SQLite
-            let db_file = data_dir.join("data.db");
-            let url = format!("sqlite://{}", db_file.to_string_lossy().replace('\\', "/"));
-            println!("DB en: {}", db_file.display());
-
+            // 2) Inicializá la BD usando el AppHandle (db.rs resuelve la URL y corre migraciones)
             let pool = tauri::async_runtime::block_on(async {
-                db::init_db(&url).await
+                db::init_db(&handle).await
             }).expect("falló init_db");
 
-            // Registrar AppState en el contexto de Tauri
+            // 3) Registrar AppState en el contexto de Tauri
             app.manage(AppState {
                 pool,
                 session_user: Arc::new(Mutex::new(None)),
@@ -53,15 +45,19 @@ fn main() {
             users::commands::usuario_actual,
             // === VENTAS ===
             ventas::commands::productos_disponibles,
-            ventas::commands::venta_registrar,
-
+            ventas::commands::venta_iniciar,
+            ventas::commands::venta_agregar_item,
+            ventas::commands::venta_listar,
+            ventas::commands::venta_set_cantidad,
+            ventas::commands::venta_quitar_item,
+            ventas::commands::venta_cancelar,
+            ventas::commands::venta_finalizar,
             // === CAJA ===
             caja::commands::caja_esta_abierta,
             caja::commands::caja_abrir,
             caja::commands::caja_cerrar,
             caja::commands::auth_logout,
             caja::commands::ping_inline,
-
             // ==== STOCK ===
             stock::commands::stock_listar,
             stock::commands::producto_crear,
@@ -71,7 +67,7 @@ fn main() {
             stock::commands::precio_actualizar,
             stock::commands::stock_mov_listar,
             stock::commands::precio_hist_listar,
-            stock::commands::stock_fijar_absoluto,
+            
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

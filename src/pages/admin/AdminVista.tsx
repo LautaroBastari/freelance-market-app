@@ -93,13 +93,13 @@ const linkActive = "text-neutral-900";
           </NavLink>
 
           <NavLink
-            to="ventas"
+            to="/ventas"
             className={({ isActive }) =>
               `${linkBase} ${isActive ? linkActive : linkInactive}`
             }
             title="Ventas"
           >
-            <div className={iconPill(pathname.startsWith("/admin/ventas"))}>
+            <div className={iconPill(pathname.startsWith("/ventas"))}>
               {/* Cart Icon */}
               <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="9" cy="21" r="1" />

@@ -1,14 +1,20 @@
 PRAGMA foreign_keys = ON;
 
+-- ===========================
+-- USUARIO
+-- ===========================
 CREATE TABLE usuario (
   id_usuario      INTEGER PRIMARY KEY,
   nombre          TEXT NOT NULL,
   nombre_usuario  TEXT NOT NULL UNIQUE,
-  rol             TEXT NOT NULL DEFAULT 'operador',
+  rol_tipo        TEXT NOT NULL DEFAULT 'operador',
   clave_hash      TEXT NOT NULL,
   activo          INTEGER NOT NULL DEFAULT 1
 );
 
+-- ===========================
+-- CAJA (sin cerrada_por)
+-- ===========================
 CREATE TABLE caja (
   id_caja     INTEGER PRIMARY KEY,
   abierta_por INTEGER NOT NULL REFERENCES usuario(id_usuario),
@@ -17,6 +23,9 @@ CREATE TABLE caja (
   estado      TEXT NOT NULL
 );
 
+-- ===========================
+-- PRODUCTO
+-- ===========================
 CREATE TABLE producto (
   id_producto           INTEGER PRIMARY KEY,
   codigo_producto       TEXT NOT NULL UNIQUE,
@@ -26,13 +35,18 @@ CREATE TABLE producto (
   activo                INTEGER NOT NULL DEFAULT 1
 );
 
+-- ===========================
+-- PRODUCTO_STOCK (SIN CHECK >= 0)
+-- ===========================
 CREATE TABLE producto_stock (
   id_producto    INTEGER PRIMARY KEY REFERENCES producto(id_producto),
   stock_actual   INTEGER NOT NULL DEFAULT 0,
-  actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CHECK (stock_actual >= 0)
+  actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ===========================
+-- STOCK_MOV
+-- ===========================
 CREATE TABLE stock_mov (
   id_movimiento   INTEGER PRIMARY KEY,
   id_producto     INTEGER NOT NULL REFERENCES producto(id_producto),
@@ -41,9 +55,10 @@ CREATE TABLE stock_mov (
   referencia      TEXT,
   fecha_hora      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_stock_mov_prod_fecha ON stock_mov(id_producto, fecha_hora);
 
--- Si te quedás con la versión "venta/costo" separadas:
+-- ===========================
+-- PRECIO_HISTORIAL (unificado)
+-- ===========================
 CREATE TABLE precio_historial (
   id_precio      INTEGER PRIMARY KEY,
   id_producto    INTEGER NOT NULL REFERENCES producto(id_producto),
@@ -52,17 +67,22 @@ CREATE TABLE precio_historial (
   vigente_desde  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   vigente_hasta  DATETIME
 );
-CREATE INDEX precio_hist_ix_busqueda ON precio_historial(id_producto, tipo, vigente_desde);
 
+-- ===========================
+-- VENTA  (DEFAULT 'en_curso')
+-- ===========================
 CREATE TABLE venta (
   id_venta    INTEGER PRIMARY KEY,
   id_usuario  INTEGER NOT NULL REFERENCES usuario(id_usuario),
   id_caja     INTEGER NOT NULL REFERENCES caja(id_caja),
   fecha_hora  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   total       INTEGER NOT NULL DEFAULT 0,
-  estado      TEXT NOT NULL DEFAULT 'finalizada'
+  estado      TEXT NOT NULL DEFAULT 'en_curso'   -- ← crítico para carrito
 );
 
+-- ===========================
+-- VENTA_ITEM (snapshot de precio)
+-- ===========================
 CREATE TABLE venta_item (
   id_item         INTEGER PRIMARY KEY,
   id_venta        INTEGER NOT NULL REFERENCES venta(id_venta) ON DELETE CASCADE,
@@ -72,5 +92,3 @@ CREATE TABLE venta_item (
   fuente_precio   TEXT NOT NULL,             -- 'catalogo' | 'manual' | 'promo'
   subtotal        INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX venta_item_ix_venta ON venta_item(id_venta);
-CREATE INDEX venta_item_ix_producto ON venta_item(id_producto);

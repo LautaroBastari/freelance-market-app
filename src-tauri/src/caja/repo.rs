@@ -27,15 +27,14 @@ pub async fn ultima_caja_abierta_id(pool: &SqlitePool) -> Result<Option<i64>, sq
     Ok(id)
 }
 
-pub async fn cerrar_caja(pool: &SqlitePool, id_caja: i64, user_id: i64) -> Result<(), sqlx::Error> {
+pub async fn cerrar_caja(pool: &SqlitePool, id_caja: i64, _user_id: i64) -> Result<(), sqlx::Error> {
+    // Cerrar SIN escribir 'cerrada_por' (columna no existe en tu DB actual)
     sqlx::query(
         "UPDATE caja
                 SET estado='cerrada',
-                    cerrada_en=DATETIME('now','localtime'),
-                    cerrada_por=?1
-                WHERE id_caja=?2 AND estado='abierta';"
+                    cerrada_en=DATETIME('now','localtime')
+                WHERE id_caja=?1 AND estado='abierta';"
     )
-    .bind(user_id)
     .bind(id_caja)
     .execute(pool).await?;
     Ok(())
@@ -43,8 +42,9 @@ pub async fn cerrar_caja(pool: &SqlitePool, id_caja: i64, user_id: i64) -> Resul
 
 /// (Opcional) obtener una caja ya persistida
 pub async fn obtener_caja(pool: &SqlitePool, id_caja: i64) -> Result<Option<Caja>, sqlx::Error> {
+    // No selecciones 'cerrada_por' para evitar error de columna inexistente
     let row = sqlx::query(
-        "SELECT id_caja, abierta_por, abierta_en, estado, cerrada_por, cerrada_en
+        "SELECT id_caja, abierta_por, abierta_en, estado, cerrada_en
            FROM caja
           WHERE id_caja=?1"
     )
@@ -59,7 +59,8 @@ pub async fn obtener_caja(pool: &SqlitePool, id_caja: i64) -> Result<Option<Caja
             "abierta" => EstadoCaja::Abierta,
             _ => EstadoCaja::Cerrada,
         },
-        cerrada_por: r.try_get("cerrada_por").ok(),
+        // Como la columna no existe, forzamos None para mantener compatibilidad del modelo
+        cerrada_por: None,
         cerrada_en: r.try_get("cerrada_en").ok(),
     }))
 }

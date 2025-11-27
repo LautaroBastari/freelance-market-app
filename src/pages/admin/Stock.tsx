@@ -379,7 +379,6 @@ async function abrirHistorial(p: StockResumen) {
     }
   }
 
-  const vacio = !loading && rows.length === 0 && !error;
 
   function lockBodyScroll() {
     const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;

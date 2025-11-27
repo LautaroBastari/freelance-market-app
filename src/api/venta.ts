@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 export type ProductoDisponible = {
   id_producto: number;
   nombre: string;
-  precio_unit: number;
+  precio_unitario: number;
   stock_disponible: number;
 };
 

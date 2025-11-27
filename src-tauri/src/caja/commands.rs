@@ -33,17 +33,35 @@ pub struct CajaAbrirOut { pub id_caja: i64 }
 pub struct CajaCerrarOut { pub id_caja: i64 }
 
 #[tauri::command]
-pub async fn caja_abrir(state: State<'_, AppState>, auth: State<'_, AuthState>)
--> Result<CajaAbrirOut, String> {
+pub async fn caja_abrir(
+    state: State<'_, AppState>,
+    auth: State<'_, AuthState>,
+) -> Result<CajaAbrirOut, String> {
     let uid = read_uid(&auth, &state)
         .ok_or_else(|| "Tenes que iniciar sesion para abrir caja".to_string())?;
 
-    if repo::existe_caja_abierta(&state.pool).await.map_err(|e| e.to_string())? {
-        return Err("Ya hay una caja abierta".into());
+    // 1) Si ya hay caja abierta, cerrarla automáticamente
+    if repo::existe_caja_abierta(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?
+    {
+        if let Some(id_abierta) = repo::ultima_caja_abierta_id(&state.pool)
+            .await
+            .map_err(|e| e.to_string())?
+        {
+            // uid se pasa aunque repo::cerrar_caja hoy no lo use
+            repo::cerrar_caja(&state.pool, id_abierta, uid)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
     }
 
-    let id = repo::abrir_caja(&state.pool, uid).await.map_err(|e| e.to_string())?;
-    Ok(CajaAbrirOut { id_caja: id })
+    // 2) Abrir nueva caja
+    let id_nueva = repo::abrir_caja(&state.pool, uid)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(CajaAbrirOut { id_caja: id_nueva })
 }
 
 #[tauri::command]
