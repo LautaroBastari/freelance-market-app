@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;                // ← import
+use sqlx::FromRow;                
 
-#[derive(Debug, Serialize, FromRow)]   // ← añade FromRow
+#[derive(Debug, Serialize, FromRow)]   
 pub struct Usuario {
     pub id_usuario: i64,
     pub nombre: String,
     pub nombre_usuario: String,
     pub rol: String,
-    pub activo: i64,              // INTEGER en SQLite → i64 aquí
+    pub activo: i64,             
 }
 
 #[derive(Debug, Deserialize)]
@@ -35,4 +35,19 @@ pub struct ListarUsuariosParams {
     pub q: Option<String>,
     pub offset: Option<i64>,
     pub limit: Option<i64>,
+}
+
+
+#[derive(Serialize, Debug, Clone, FromRow)]
+pub struct UsuarioOpcionSueldo {
+    pub id_usuario: i64,
+    pub nombre: String,
+    pub rol_tipo: String,
+    pub activo: i64,
+}
+
+#[derive(Serialize, Debug, Clone, FromRow)]
+pub struct UsuarioOpcion {
+    pub id_usuario: i64,
+    pub nombre: String,
 }

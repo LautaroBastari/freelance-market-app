@@ -3,6 +3,7 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { sessionInfo, type SessionInfo } from "../api/sesion";
+import logoHuevo from "../../public/final2.png";
 
 type Rol = "admin" | "operador";
 
@@ -17,7 +18,7 @@ export default function Login() {
     e.preventDefault();
     setMsg("");
 
-    const u = usuario.trim();
+    const u = usuario.trim().toLowerCase();
     if (!u || !password) {
       setMsg("Usuario y contraseña son obligatorios");
       return;
@@ -25,7 +26,7 @@ export default function Login() {
 
     setLoading(true);
     try {
-      // 1) Autenticar (debe setear sesión del lado Tauri)
+      //  Autenticar (debe setear sesión del lado Tauri)
       const ok = await invoke<boolean>("login", {
         input: { nombre_usuario: u, password },
       });
@@ -34,24 +35,23 @@ export default function Login() {
         return;
       }
 
-      // 2) Intentar obtener {usuarioId, rol} de forma robusta
+      //  Intentar obtener {usuarioId, rol} de forma robusta
       const { usuarioId, rol } = await fetchUsuarioYRol(u);
 
       if (!usuarioId || !rol) {
         setMsg(
           "Sesión inválida: faltan datos de usuario/rol. " +
-          "Asegurate de que el backend exponga sessionInfo() o un comando que devuelva el rol."
+            "Asegurate de que el backend exponga sessionInfo() o un comando que devuelva el rol."
         );
         return;
       }
 
-      // 3) Persistir para useSession()
+      //  Persistir para useSession()
       localStorage.setItem("usuarioId", String(usuarioId));
       localStorage.setItem("rol", rol.toLowerCase());
       window.dispatchEvent(new Event("session-updated"));
-      navigate(rol === "admin" ? "/admin" : "/ventas", { replace: true });
 
-      // 4) Redirigir
+      //  Redirigir (una sola vez)
       navigate(rol === "admin" ? "/admin" : "/ventas", { replace: true });
     } catch (err) {
       setMsg(String(err));
@@ -61,67 +61,118 @@ export default function Login() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gradient-to-b from-yellow-50 to-white">
-      <form
-        onSubmit={handleLogin}
-        className="bg-white/70 backdrop-blur-sm border border-yellow-100 p-8 rounded-2xl shadow-lg w-96 flex flex-col gap-4"
-      >
-        <h1 className="text-3xl font-bold text-gray-800 text-center">
-          Iniciar sesión
-        </h1>
+    <main className="min-h-screen bg-gradient-to-b from-yellow-50 via-yellow-50 to-white">
+      <div className="min-h-screen flex justify-center px-6 pt-16 pb-10">
+        <div className="w-full max-w-md">
+          {/* Logo centrado arriba de la card */}
+          <div className="flex flex-col items-center text-center gap-1">
+            <img
+              src="/final2.png"
+              alt="Logo Huevo Santo"
+              className="w-32 h-32 object-contain -mb-2"
+              draggable={false}
+            />
 
-        <input
-          placeholder="Usuario"
-          value={usuario}
-          onChange={(e) => setUsuario(e.target.value)}
-          className="bg-white/90 border border-gray-300 p-2 rounded-md focus:ring-2 focus:ring-yellow-300 outline-none"
-          autoComplete="username"
-        />
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 leading-tight">
+              Huevo Santo
+            </h1>
 
-        <input
-          type="password"
-          placeholder="Contraseña"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="bg-white/90 border border-gray-300 p-2 rounded-md focus:ring-2 focus:ring-yellow-300 outline-none"
-          autoComplete="current-password"
-        />
+            <p className="text-sm text-slate-600 leading-tight">
+              Sistema de gestión comercial
+            </p>
+          </div>
+          {/* Card centrada */}
+          <form
+            onSubmit={handleLogin}
+            className="bg-white/70 backdrop-blur-sm border border-yellow-100 rounded-2xl shadow-lg p-7"
+          >
+            <div className="mb-6">
+              <h1 className="text-lg font-semibold text-slate-900">
+                Iniciar sesión
+              </h1>
+              <p className="text-sm text-slate-600 mt-1">
+                Ingresá tus credenciales para continuar.
+              </p>
+            </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="bg-yellow-100 hover:bg-yellow-200 text-gray-800 font-semibold p-2 rounded-md transition disabled:opacity-60"
-        >
-          {loading ? "Entrando..." : "Entrar"}
-        </button>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Usuario
+                </label>
+                <input
+                  value={usuario}
+                  onChange={(e) => setUsuario(e.target.value)}
+                  className="w-full h-11 rounded-xl border border-slate-300 bg-white/90 px-3 text-slate-900
+                             placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-yellow-300/70"
+                  placeholder="Tu usuario"
+                  autoComplete="username"
+                />
+              </div>
 
-        <button
-          type="button"
-          onClick={() => navigate("/registrar")}
-          style={{
-            backgroundColor: "#fff7cc",
-            border: "none",
-            borderRadius: "6px",
-            padding: "10px 20px",
-            cursor: "pointer",
-            fontWeight: "bold",
-            boxShadow: "0 0 2px rgba(0,0,0,0.15)",
-            width: "100%",
-            marginTop: "0.5rem",
-          }}
-        >
-          RegistrarCuenta
-        </button>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Contraseña
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full h-11 rounded-xl border border-slate-300 bg-white/90 px-3 text-slate-900
+                             placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-yellow-300/70"
+                  placeholder="Tu contraseña"
+                  autoComplete="current-password"
+                />
+              </div>
 
-        {msg && <p className="text-red-500 text-sm text-center">{msg}</p>}
-      </form>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full h-11 rounded-xl bg-slate-900 text-white font-medium
+                           hover:bg-slate-800 transition disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {loading ? "Validando..." : "Iniciar sesión"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate("/registrar")}
+                className="w-full h-11 rounded-xl border border-slate-300 bg-white/90 text-slate-900 font-medium
+                           hover:bg-white transition"
+              >
+                Registrar cuenta
+              </button>
+              
+              {msg && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2">
+                  <p className="text-sm text-red-700">{msg}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex items-center justify-between text-xs text-slate-500">
+              <span>
+                <span className="font-medium text-slate-700">Uso interno.</span>{" "}
+                No compartas tus credenciales.
+              </span>
+              <span className="text-slate-400">v0.1.0</span>
+            </div>
+          </form>
+
+          <div className="mt-6 text-center text-xs text-slate-500">
+            © {new Date().getFullYear()} Huevo Santo
+          </div>
+        </div>
+      </div>
     </main>
   );
 }
 
-/* ---------------------- helpers ---------------------- */
+// helpers 
 
-async function fetchUsuarioYRol(nombreUsuario: string): Promise<{ usuarioId: number | null; rol?: Rol }> {
+async function fetchUsuarioYRol(
+  nombreUsuario: string
+): Promise<{ usuarioId: number | null; rol?: Rol }> {
   try {
     const info: SessionInfo = await sessionInfo();
     const parsed = parseSessionInfo(info);
@@ -148,7 +199,6 @@ async function fetchUsuarioYRol(nombreUsuario: string): Promise<{ usuarioId: num
     if (usuarioId && rol) return { usuarioId, rol };
   } catch {}
 
-  // si nada devuelve rol válido -> error explícito (no navegues)
   return { usuarioId: null, rol: undefined };
 }
 

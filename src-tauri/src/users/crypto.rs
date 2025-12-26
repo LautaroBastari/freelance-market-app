@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::password_hash::SaltString;
-use rand_core::OsRng; // requiere features=["getrandom"] en Cargo.toml
+use rand_core::OsRng; 
 
 pub fn hash_password(plain: &str) -> Result<String> {
     if plain.is_empty() {

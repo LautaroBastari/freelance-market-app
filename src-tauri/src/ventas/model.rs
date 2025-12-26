@@ -15,3 +15,10 @@ pub struct VentaLineaInput {
     pub cantidad: i64, // INTEGER > 0
 }
 
+
+#[derive(Debug, Deserialize)]
+pub struct PromoComboAplicarInput {
+    pub id_venta: i64,
+    pub id_combo: i64,
+    pub precio_total_pack: i64,
+}

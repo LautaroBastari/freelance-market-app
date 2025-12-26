@@ -16,7 +16,8 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.9.4",
-    "react-window": "^2.2.0"
+    "react-window": "^2.2.0",
+    "recharts": "^3.6.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

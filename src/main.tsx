@@ -1,4 +1,4 @@
-import "./app.css";  // o "./App.css" según tu archivo real
+import "./app.css"; 
 import { createRoot } from "react-dom/client";
 import App from "./App";
 

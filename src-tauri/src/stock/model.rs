@@ -60,3 +60,55 @@ pub struct Producto {
     pub costo_actual: i64,
     pub activo: i64,
 }
+
+
+//Perdidas
+#[derive(Debug, Deserialize)]
+pub struct StockMermaInput {
+    pub id_producto: i64,
+    pub cantidad: i64,
+    pub motivo: String,
+    pub observacion: Option<String>,
+    pub id_usuario: i64,
+}
+
+//Compra de cajones
+#[derive(Debug, Deserialize)]
+pub struct CompraStockInput {
+    pub id_producto: i64,
+    pub unidad: String,   // "MAPLE" | "CAJON"
+    pub cantidad: i64,
+    pub costo_total: i64,
+}
+
+//Reposicion automatica
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReposicionModo {
+    Unitario,
+    Cajon,
+}
+
+impl ReposicionModo {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ReposicionModo::Unitario => "unitario",
+            ReposicionModo::Cajon => "cajon",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UnidadCompra {
+    MAPLE,
+    CAJON,
+}
+
+impl UnidadCompra {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            UnidadCompra::MAPLE => "MAPLE",
+            UnidadCompra::CAJON => "CAJON",
+        }
+    }
+}

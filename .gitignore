@@ -43,3 +43,10 @@ src-tauri/data/
 src-tauri/target/
 *.pdb
 *.dwp
+
+# SQLx (cache generado)
+src-tauri/.sqlx/
+**/.sqlx/
+
+# Vite/React (cache local)
+.vite/

@@ -1,7 +1,6 @@
 use tauri::State;
 use crate::AppState;
-use super::auth::AuthState; // <-- tu módulo de auth con current_user_id
-// use sqlx::Row; // innecesario
+use super::auth::AuthState; 
 
 #[tauri::command]
 pub async fn ping_inline() -> &'static str { "pong" }
@@ -19,7 +18,6 @@ pub async fn caja_abrir(state: State<'_, AppState>, auth: State<'_, AuthState>) 
     let uid = auth.current_user_id.read().map_err(|_| "lock")?
         .ok_or_else(|| "no login".to_string())?;
 
-    // evitar duplicado de caja abierta
     let ya_abierta: Option<i64> = sqlx::query_scalar("SELECT 1 FROM caja WHERE estado='abierta' LIMIT 1")
         .fetch_optional(&state.pool).await.map_err(|e| e.to_string())?;
     if ya_abierta.is_some() {
@@ -35,7 +33,6 @@ pub async fn caja_abrir(state: State<'_, AppState>, auth: State<'_, AuthState>) 
 
 #[tauri::command]
 pub async fn caja_cerrar(state: State<'_, AppState>, auth: State<'_, AuthState>) -> Result<i64, String> {
-    // Sigo validando que haya usuario logueado, pero no lo uso para escribir en DB
     let _uid = auth.current_user_id.read().map_err(|_| "lock")?
         .ok_or_else(|| "no login".to_string())?;
 
@@ -47,8 +44,6 @@ pub async fn caja_cerrar(state: State<'_, AppState>, auth: State<'_, AuthState>)
     .map_err(|e| e.to_string())?;
 
     let Some(id) = id_caja else { return Err("No hay caja abierta".into()); };
-
-    // Cerrar SIN tocar 'cerrada_por'
     sqlx::query(
         "UPDATE caja
            SET estado='cerrada',
@@ -68,3 +63,4 @@ pub async fn auth_logout(auth: State<'_, AuthState>) -> Result<(), String> {
     *auth.current_user_id.write().map_err(|_| "lock")? = None;
     Ok(())
 }
+

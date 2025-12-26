@@ -29,7 +29,6 @@ export default function UsuariosPage() {
     if (!usuario || !password) { setErr("Faltan usuario/contraseña."); return; }
     setBusy(true);
     try {
-      // No mandes rol; el back lo fuerza a "operador"
       const id = await invoke<number>("usuario_crear", {
         input: { nombre: usuario, nombre_usuario: usuario, password }
       });

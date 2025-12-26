@@ -14,7 +14,7 @@ impl EstadoCaja {
 pub struct Caja {
     pub id_caja: i64,
     pub abierta_por: i64,
-    pub abierta_en: String,         // podés usar chrono::DateTime si querés
+    pub abierta_en: String,       
     pub estado: EstadoCaja,
     pub cerrada_por: Option<i64>,
     pub cerrada_en: Option<String>,

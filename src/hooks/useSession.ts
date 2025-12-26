@@ -29,17 +29,17 @@ export default function useSession(): SessionState {
 
   async function sync() {
     try {
-      // 1) leer front
+      // leer front
       const lsId = localStorage.getItem("usuarioId");
       const lsRol = normRol(localStorage.getItem("rol"));
       if (lsId && lsRol) { setS({ usuarioId: Number(lsId), rol: lsRol, loading: false }); return; }
 
-      // 2) backend
+      //  backend
       const info = await sessionInfo();
       const { usuarioId, rol } = parse(info);
       setS({ usuarioId, rol, loading: false });
 
-      // 3) corrige localStorage
+      //  corrige localStorage
       if (usuarioId) localStorage.setItem("usuarioId", String(usuarioId));
       if (rol) localStorage.setItem("rol", rol);
     } catch {

@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { motion, AnimatePresence } from "framer-motion";
-
-/* ===== Tipos ===== */
+import ModalMerma from "./ModalMerma";
+import CrearPromoComboModal from "../CrearPromoComboModal";
+/*  Tipos  */
 type StockResumen = {
   id_producto: number;
   codigo: string;
@@ -12,6 +13,7 @@ type StockResumen = {
   stock_actual: number;
   precio_venta_actual: number;
   costo_actual: number;
+  activo: number;
 };
 
 type StockMov = {
@@ -39,8 +41,8 @@ type Evento = {
 
 type Accion = "cantidad" | "precio_venta" | "costo" | "ambos";
 type ModoCant = "delta" | "fijar";
-
-/* ===== Helpers ===== */
+type ProductoRow = StockResumen;
+/*  Helpers  */
 const withTimeout = <T,>(p: Promise<T>, ms = 7000) =>
   Promise.race<T>([
     p,
@@ -53,6 +55,18 @@ const toInt = (n: number | string): number => {
   const x = typeof n === "string" ? Number(n.trim()) : n;
   return Number.isFinite(x) ? Math.trunc(Number(x)) : NaN;
 };
+
+const parseNonNegInt = (label: string, raw: string): number => {
+  const s = (raw ?? "").trim();
+  // Permitimos vacío mientras edita; al guardar vacío = 0
+  if (s === "") return 0;
+  const n = Number(s);
+  if (!Number.isFinite(n)) throw new Error(`${label} inválido.`);
+  const v = Math.trunc(n);
+  if (v < 0) throw new Error(`${label} inválido.`);
+  return v;
+};
+
 
 function toast(msg: string) {
   const el = document.createElement("div");
@@ -76,18 +90,17 @@ function formatFecha(s: string) {
   return dUtc.toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour12: false });
 }
 
-/* ===== Componente ===== */
+/*  Componente  */
 export default function Stock() {
   const nav = useNavigate();
 
-  /* ---- Estado base ---- */
+  /*  Estado base  */
   const [q, setQ] = useState("");
-  const [soloActivos, setSoloActivos] = useState(true);
   const [rows, setRows] = useState<StockResumen[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
 
-  /* ---- Modal ACTUALIZAR ---- */
+  /*  Modal ACTUALIZAR  */
   const [openAct, setOpenAct] = useState(false);
   const [selAct, setSelAct] = useState<StockResumen | null>(null);
   const [accion, setAccion] = useState<Accion>("cantidad");
@@ -103,21 +116,56 @@ export default function Stock() {
   const [histEventos, setHistEventos] = useState<Evento[]>([]);
   const [loadingHist, setLoadingHist] = useState(false);
 
+  /* ---- Modal CONFIRM (custom) ---- */
+  const [openConfirm, setOpenConfirm] = useState(false);
+  const [confirmTitle, setConfirmTitle] = useState("Confirmar");
+  const [confirmBody, setConfirmBody] = useState<React.ReactNode>(null);
+  const [confirmDanger, setConfirmDanger] = useState(false);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [onConfirm, setOnConfirm] = useState<(() => Promise<void>) | null>(null);
+
+  const [verDesactivados, setVerDesactivados] = useState(false);
+
+  function abrirConfirm(opts: {
+    title: string;
+    body: React.ReactNode;
+    danger?: boolean;
+    onOk: () => Promise<void>;
+  }) {
+    setConfirmTitle(opts.title);
+    setConfirmBody(opts.body);
+    setConfirmDanger(!!opts.danger);
+    setOnConfirm(() => opts.onOk);
+    setConfirmBusy(false);
+    setOpenConfirm(true);
+  }
+
   /* ---- Modal NUEVO PRODUCTO ---- */
   const [openNuevo, setOpenNuevo] = useState(false);
+  const [openPromo, setOpenPromo] = useState(false);
   const [npCodigo, setNpCodigo] = useState("");
   const [npNombre, setNpNombre] = useState("");
-  const [npPrecioVenta, setNpPrecioVenta] = useState<number>(0);
-  const [npCosto, setNpCosto] = useState<number>(0);
-  const [npStockIni, setNpStockIni] = useState<number>(0);
+  const [npPrecioVentaTxt, setNpPrecioVentaTxt] = useState<string>("0");
+const [npCostoTxt, setNpCostoTxt] = useState<string>("0");
+const [npStockIniTxt, setNpStockIniTxt] = useState<string>("0");
   const [savingNuevo, setSavingNuevo] = useState(false);
+  const [npReposicionModo, setNpReposicionModo] = useState<"unitario" | "cajon">("unitario");
+  const [npReposicionFactor, setNpReposicionFactor] = useState<number>(12);
+  /*  Perdidas modal  */
+  const [modalMermaAbierto, setModalMermaAbierto] = useState(false);
+  const [productoSeleccionado, setProductoSeleccionado] =
+  useState<ProductoRow | null>(null);
 
+  /*  Cargar listado de promos */
+  const [tab, setTab] = useState<"productos" | "promos">("productos");
   useEffect(() => {
     cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  /* ===== Data ===== */
+useEffect(() => {
+  cargar();
+}, [verDesactivados]);
+  /*  Data  */
   async function cargar() {
     setLoading(true);
     setError("");
@@ -125,7 +173,7 @@ export default function Stock() {
       const data = await withTimeout(
         invoke<StockResumen[]>("stock_listar", {
           q,
-          solo_activos: soloActivos,
+          solo_activos: !verDesactivados,
           limit: 200,
           offset: 0,
         }),
@@ -139,7 +187,7 @@ export default function Stock() {
     }
   }
 
-  /* ===== Historial lateral ===== */
+  /*  Historial lateral  */
   function humanizeMotivo(m: string, delta: number): string {
   const s = (m || "").trim().toLowerCase();
 
@@ -226,7 +274,7 @@ async function abrirHistorial(p: StockResumen) {
   }
 }
 
-  /* ===== Actualizar ===== */
+  /*  Actualizar  */
   function abrirActualizar(p: StockResumen) {
     lockBodyScroll();
     setSelAct(p);
@@ -245,11 +293,15 @@ async function abrirHistorial(p: StockResumen) {
     try {
       // 1) Cantidad
       if (accion === "cantidad" || accion === "ambos") {
-        if (modoCant === "delta") {
-          const delta = Math.trunc(cantidad);
-          if (!Number.isFinite(delta) || delta === 0) throw new Error("Cantidad inválida.");
-          const final = selAct.stock_actual + delta;
-          if (final < 0) throw new Error("Stock negativo: el ajuste dejaría < 0.");
+       if (modoCant === "delta") {
+        const delta = Math.trunc(cantidad);
+
+        // Regla:
+        // - si accion === "cantidad": delta 0 es inválido (porque no estarías haciendo nada)
+        // - si accion === "ambos": delta 0 NO es error, se ignora y se sigue con precios/costo
+        if (!Number.isFinite(delta)) throw new Error("Cantidad inválida.");
+
+        if (delta !== 0) {
           await withTimeout(
             invoke("stock_ajustar", {
               input: {
@@ -261,46 +313,72 @@ async function abrirHistorial(p: StockResumen) {
             }),
           );
         } else {
+          if (accion === "cantidad") throw new Error("Cantidad inválida.");
+          // si es "ambos", delta=0 => no tocar stock, seguir
+        }
+      } else {
+          // MODO FIJAR ABSOLUTO
           // MODO FIJAR ABSOLUTO
           const nuevo = Math.trunc(cantidad);
-          if (!Number.isFinite(nuevo) || nuevo < 0) throw new Error("Stock inválido. No puede ser negativo.");
+          if (!Number.isFinite(nuevo) || nuevo < 0) {
+            throw new Error("Stock inválido. No puede ser negativo.");
+          }
 
-          await withTimeout(
-            invoke("stock_fijar_absoluto", {
-              input: {
-                id_producto: selAct.id_producto,
-                nuevo,
-                motivo: "ajuste_absoluto_ui",
-                referencia: nota || null,
-              },
-            }),
-          );
+          // Si no cambia, no hagas nada.
+          // - En "cantidad": si no cambia, es inválido (no estarías haciendo nada)
+          // - En "ambos": si no cambia, se ignora y se sigue con precios/costo
+          if (nuevo === selAct.stock_actual) {
+            if (accion === "cantidad") throw new Error("Cantidad inválida.");
+            // accion === "ambos": no tocar stock, seguir
+          } else {
+            await withTimeout(
+              invoke("stock_fijar_absoluto", {
+                input: {
+                  id_producto: selAct.id_producto,
+                  nuevo,
+                  motivo: "ajuste_absoluto_ui",
+                  referencia: nota || null,
+                },
+              }),
+            );
+          }
         }
       }
 
       // 2) Precio de venta
       if (accion === "precio_venta" || accion === "ambos") {
         const pv = toInt(precioVenta);
-        if (!Number.isFinite(pv) || pv < 0) throw new Error("Precio inválido.");
-        if (pv !== selAct.precio_venta_actual) {
-          await withTimeout(
-            invoke("precio_actualizar", {
-              input: { id_producto: selAct.id_producto, tipo: "venta", nuevo: pv },
-            }),
-          );
+
+        // Si está vacío / NaN:
+        // - si accion es "precio_venta": es error
+        // - si accion es "ambos": lo ignoro (no toco precio)
+        if (!Number.isFinite(pv) || pv < 0) {
+          if (accion === "precio_venta") throw new Error("Precio inválido.");
+        } else {
+          if (pv !== selAct.precio_venta_actual) {
+            await withTimeout(
+              invoke("precio_actualizar", {
+                input: { id_producto: selAct.id_producto, tipo: "venta", nuevo: pv },
+              }),
+            );
+          }
         }
       }
 
       // 3) Costo
       if (accion === "costo" || accion === "ambos") {
         const co = toInt(costo);
-        if (!Number.isFinite(co) || co < 0) throw new Error("Costo inválido.");
-        if (co !== selAct.costo_actual) {
-          await withTimeout(
-            invoke("precio_actualizar", {
-              input: { id_producto: selAct.id_producto, tipo: "costo", nuevo: co },
-            }),
-          );
+
+        if (!Number.isFinite(co) || co < 0) {
+          if (accion === "costo") throw new Error("Costo inválido.");
+        } else {
+          if (co !== selAct.costo_actual) {
+            await withTimeout(
+              invoke("precio_actualizar", {
+                input: { id_producto: selAct.id_producto, tipo: "costo", nuevo: co },
+              }),
+            );
+          }
         }
       }
 
@@ -309,75 +387,81 @@ async function abrirHistorial(p: StockResumen) {
       await cargar();
       toast("Actualizado.");
     } catch (e) {
-      const msg = String(e);
-      if (msg.includes("stock_actual") && msg.includes("CHECK")) {
-        toast("Rechazado por la base: stock no puede quedar negativo.");
-      } else if (msg.toLowerCase().includes("timeout")) {
-        toast("Timeout del backend.");
-      } else {
-        toast(msg);
-      }
+      toast(String(e));
     } finally {
       setSavingAct(false);
     }
   }
 
-  /* ===== Nuevo producto ===== */
-  async function crearProducto() {
-    if (!npCodigo.trim()) throw new Error("Código requerido.");
-    if (!npNombre.trim()) throw new Error("Nombre requerido.");
-    if (!Number.isFinite(npPrecioVenta) || npPrecioVenta < 0) throw new Error("Precio de venta inválido.");
-    if (!Number.isFinite(npCosto) || npCosto < 0) throw new Error("Costo inválido.");
-    if (!Number.isFinite(npStockIni) || npStockIni < 0) throw new Error("Stock inicial inválido.");
+  /*  Nuevo producto  */
+async function crearProducto() {
+  if (!npCodigo.trim()) throw new Error("Código requerido.");
+  if (!npNombre.trim()) throw new Error("Nombre requerido.");
 
-    setSavingNuevo(true);
-    try {
-      const res = await withTimeout(
-        invoke<{ id_producto: number }>("producto_crear", {
+  const npPrecioVenta = parseNonNegInt("Precio de venta", npPrecioVentaTxt);
+  const npCosto = parseNonNegInt("Costo", npCostoTxt);
+  const npStockIni = parseNonNegInt("Stock inicial", npStockIniTxt);
+
+  // validación reposición
+  if (npReposicionModo === "cajon") {
+    if (!Number.isFinite(npReposicionFactor) || npReposicionFactor <= 0) {
+      throw new Error("Unidades por cajón inválidas.");
+    }
+  }
+
+  setSavingNuevo(true);
+  try {
+    const res = await withTimeout(
+      invoke<{ id_producto: number }>("producto_crear", {
+        input: {
+          codigo: npCodigo.trim(),
+          nombre: npNombre.trim(),
+          precio_venta: npPrecioVenta,
+          costo: npCosto,
+          reposicion_modo: npReposicionModo,
+          reposicion_factor:
+            npReposicionModo === "cajon" ? Math.trunc(npReposicionFactor) : 12,
+        },
+      }),
+    );
+
+    if (npStockIni > 0) {
+      await withTimeout(
+        invoke("stock_ajustar", {
           input: {
-            codigo: npCodigo.trim(),
-            nombre: npNombre.trim(),
-            precio_venta: Math.trunc(npPrecioVenta),
-            costo: Math.trunc(npCosto),
+            id_producto: res.id_producto,
+            delta: npStockIni,
+            motivo: "ingreso_inicial",
+            referencia: "alta_producto",
           },
         }),
       );
-
-      if (npStockIni > 0) {
-        await withTimeout(
-          invoke("stock_ajustar", {
-            input: {
-              id_producto: res.id_producto,
-              delta: Math.trunc(npStockIni),
-              motivo: "ingreso_inicial",
-              referencia: "alta_producto",
-            },
-          }),
-        );
-      }
-
-      setOpenNuevo(false);
-      unlockBodyScroll();
-      setNpCodigo("");
-      setNpNombre("");
-      setNpPrecioVenta(0);
-      setNpCosto(0);
-      setNpStockIni(0);
-      await cargar();
-      toast("Producto creado.");
-    } catch (e) {
-      const msg = String(e);
-      if (msg.includes("UNIQUE") || msg.toLowerCase().includes("codigo")) {
-        toast("El código ya existe.");
-      } else if (msg.toLowerCase().includes("timeout")) {
-        toast("Timeout del backend.");
-      } else {
-        toast(msg);
-      }
-    } finally {
-      setSavingNuevo(false);
     }
+
+    setOpenNuevo(false);
+    unlockBodyScroll();
+    setNpCodigo("");
+    setNpNombre("");
+    setNpPrecioVentaTxt("0");
+    setNpCostoTxt("0");
+    setNpStockIniTxt("0");
+    setNpReposicionModo("unitario");
+    setNpReposicionFactor(12);
+    await cargar();
+    toast("Producto creado.");
+  } catch (e) {
+    const msg = String(e);
+    if (msg.includes("UNIQUE") || msg.toLowerCase().includes("codigo")) {
+      toast("El código ya existe.");
+    } else if (msg.toLowerCase().includes("timeout")) {
+      toast("Timeout del backend.");
+    } else {
+      toast(msg);
+    }
+  } finally {
+    setSavingNuevo(false);
   }
+}
 
 
   function lockBodyScroll() {
@@ -390,7 +474,26 @@ async function abrirHistorial(p: StockResumen) {
     document.body.style.paddingRight = "";
   }
 
-  /* ===== UI ===== */
+  /* Merma: abrir/cerrar modal */
+  function abrirModalMerma(p: ProductoRow) {
+    setProductoSeleccionado(p);
+    setModalMermaAbierto(true);
+    lockBodyScroll();
+  }
+
+  function cerrarModalMerma() {
+    setModalMermaAbierto(false);
+    setProductoSeleccionado(null);
+    unlockBodyScroll();
+  }
+
+  async function handleMermaSuccess() {
+    await cargar();          // recarga el listado de stock
+    cerrarModalMerma();
+    toast("Merma registrada.");
+  }
+
+  /*  UI  */
   return (
     <div className="relative min-h-screen bg-gradient-to-b from-yellow-50 via-white/80 to-white/95">
       <motion.main
@@ -404,340 +507,576 @@ async function abrirHistorial(p: StockResumen) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => nav("/admin")}
-              className="h-10 rounded-lg border border-gray-300 bg-white/80 px-4 text-base hover:bg-white shadow-sm"
+            type="button"
+            onClick={() => window.history.back()}
+            className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm hover:bg-gray-50 transition"
+          >
+            ← Volver
+          </button>
+            <button
+              onClick={() => nav("/admin/StockReporte")}
+              className="px-3 py-1.5 rounded text-sm font-medium 
+                        border border-amber-500 
+                        text-amber-800 
+                        bg-amber-50 
+                        hover:bg-amber-100 
+                        transition"
             >
-              ← Volver
+              Reportes
             </button>
-            <div>
-              <h1 className="font-semibold text-gray-900 text-[clamp(1.4rem,1.2vw+1rem,1.9rem)]">Inventario</h1>
-              <p className="text-[clamp(0.95rem,0.6vw+0.7rem,1.05rem)] text-gray-600">
-                Gestión de stock y precios con historial.
-              </p>
-            </div>
+            <button
+              onClick={() => nav("/admin/stock-reposicion")}
+              className="px-3 py-1.5 rounded text-sm font-medium 
+                        border border-amber-500 
+                        text-amber-800 
+                        bg-amber-50 
+                        hover:bg-amber-100 
+                        transition"
+            >
+              Reposición
+            </button>
+           <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center text-center pointer-events-none">
+            <h1 className="text-4xl font-light tracking-wide text-gray-900 leading-tight">
+              Inventario
+            </h1>
+            <p className="mt-1 text-base font-light text-gray-500">
+              Gestión de stock y precios con historial
+            </p>
+          </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <label className="inline-flex items-center gap-2 text-[clamp(0.95rem,0.6vw+0.7rem,1.05rem)] text-gray-700">
-              <input
-                type="checkbox"
-                className="size-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                checked={soloActivos}
-                onChange={(e) => setSoloActivos(e.target.checked)}
-              />
-              Solo activos
-            </label>
+            
+            
             <button
-              className="h-10 rounded-lg border border-gray-300 bg-white/80 px-4 text-base hover:bg-white shadow-sm disabled:opacity-60"
-              onClick={cargar}
-              disabled={loading}
+              onClick={() => {
+                lockBodyScroll();
+                setOpenPromo(true);
+              }}
+              className="
+                px-3 py-1.5 rounded text-sm font-medium
+                border border-amber-500
+                text-amber-800
+                bg-amber-50
+                hover:bg-amber-100
+                transition
+              "
             >
-              {loading ? "Cargando…" : "Refrescar"}
+              Crear promoción
             </button>
-            <button
-              className="h-10 rounded-lg bg-green-600 px-4 text-base font-medium text-white hover:bg-green-700 shadow-sm"
+              <button
               onClick={() => {
                 setNpCodigo("");
                 setNpNombre("");
-                setNpPrecioVenta(0);
-                setNpCosto(0);
-                setNpStockIni(0);
+                setNpPrecioVentaTxt("0");
+                setNpCostoTxt("0");
+                setNpStockIniTxt("0");
                 lockBodyScroll();
                 setOpenNuevo(true);
               }}
+              className="
+                px-3 py-1.5 rounded text-sm font-medium
+                border border-green-500
+                text-green-800
+                bg-green-50
+                hover:bg-green-100
+                transition
+              "
             >
               Nuevo producto
             </button>
+            
           </div>
         </div>
 
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-3">
           <input
-            className="h-11 w-[28rem] max-w-full rounded-lg border border-gray-300 bg-white/90 px-3 text-base outline-none shadow-sm focus:ring-2 focus:ring-blue-200"
-            placeholder="Buscar por nombre o código"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") cargar();
-            }}
-          />
-          <button
-            className="h-11 rounded-lg bg-blue-600 px-5 text-base font-medium text-white hover:bg-blue-700 shadow-sm disabled:opacity-60"
-            onClick={cargar}
-            disabled={loading}
-          >
-            Buscar
-          </button>
+          className="
+            h-9 w-[22rem] max-w-full
+            rounded-md
+            border border-gray-300
+            bg-white
+            px-3
+            text-sm
+            text-gray-800
+            placeholder-gray-400
+            outline-none
+            focus:border-blue-400
+            focus:ring-1 focus:ring-blue-200
+            transition
+          "
+          placeholder="Buscar por nombre o código"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") cargar();
+          }}
+        />
+
+        <button
+          className="
+            h-9
+            rounded-md
+            border border-blue-500
+            bg-blue-50
+            px-4
+            text-sm font-medium
+            text-blue-700
+            hover:bg-blue-100
+            transition
+            disabled:opacity-50
+          "
+          onClick={cargar}
+          disabled={loading}
+        >
+          Buscar
+        </button>
+
           {error && <span className="text-base text-red-600">{error}</span>}
+        </div>
+          
+        <div className="mb-3 flex gap-2">
+          <button
+            className={`rounded-lg px-3 py-2 ${tab === "productos" ? "bg-zinc-900 text-white" : "bg-white"}`}
+            onClick={() => setTab("productos")}
+          >
+            Productos
+          </button>
+
+          <button
+            className={`rounded-lg px-3 py-2 ${tab === "promos" ? "bg-zinc-900 text-white" : "bg-white"}`}
+            onClick={() => setTab("promos")}
+          >
+            Promociones
+          </button>
         </div>
 
         {/* Listado + Panel lateral */}
-        <div className="grid gap-6 lg:grid-cols-[1fr_440px] 2xl:grid-cols-[1fr_520px] items-start">
-          {/* LISTADO */}
-          <section className="rounded-2xl border border-gray-200 bg-white shadow-md">
-            <div className="overflow-auto rounded-2xl">
-              <table className="w-full text-[15px] font-light table-fixed">
-  <thead className="sticky top-0 bg-gray-50/80 backdrop-blur text-gray-700">
-    <tr className="border-b border-gray-100">
-      <th className="w-24 px-5 py-2.5 text-left font-semibold tracking-wide">Código</th>
-      <th className="px-5 py-2.5 text-left font-semibold tracking-wide">Nombre</th>
-      <th className="w-28 px-5 py-2.5 text-center font-semibold tracking-wide">Stock</th>
-      <th className="w-32 px-5 py-2.5 text-right font-semibold tracking-wide">Precio venta</th>
-      <th className="w-28 px-5 py-2.5 text-right font-semibold tracking-wide">Costo</th>
-      <th className="w-44 px-5 py-2.5" />
-    </tr>
-  </thead>
+{/* Listado + Panel lateral */}
+{tab === "productos" ? (
+  <div className="grid gap-6 lg:grid-cols-[1fr_440px] 2xl:grid-cols-[1fr_520px] items-start">
+    {/* LISTADO */}
+    <section className="rounded-2xl border border-gray-200 bg-white shadow-md">
+      <div className="overflow-auto rounded-2xl">
+        <table className="w-full text-[15px] font-light table-fixed">
+          <thead className="sticky top-0 bg-gray-50/80 backdrop-blur text-gray-700">
+            <tr className="border-b border-gray-100">
+              <th className="w-24 px-5 py-2.5 text-left font-semibold tracking-wide">Código</th>
+              <th className="px-5 py-2.5 text-left font-semibold tracking-wide">Nombre</th>
+              <th className="w-28 px-5 py-2.5 text-center font-semibold tracking-wide">Stock</th>
+              <th className="w-32 px-5 py-2.5 text-right font-semibold tracking-wide">Precio venta</th>
+              <th className="w-28 px-5 py-2.5 text-right font-semibold tracking-wide">Costo</th>
+              <th className="w-64 px-5 py-2.5" />
+            </tr>
+          </thead>
 
-  <tbody>
-    {rows.map((r) => (
-      <tr
-        key={r.id_producto}
-        className="border-b border-gray-100 hover:bg-yellow-50/30 transition-colors"
-      >
-        <td className="px-5 py-3 font-mono text-gray-800">{r.codigo}</td>
-        <td className="px-5 py-3 text-gray-800">{r.nombre}</td>
-
-        {/* Stock centrado */}
-        <td className="px-5 py-3 text-center">
-          <span
-            className={[
-              "inline-flex justify-center items-center rounded-full px-3 py-0.5 text-sm font-medium border shadow-sm transition-colors duration-200",
-              r.stock_actual <= 0
-                ? "bg-red-50 text-red-700 border-red-200"
-                : r.stock_actual < 5
-                ? "bg-amber-50 text-amber-700 border-amber-200"
-                : "bg-green-50 text-green-700 border-green-200",
-            ].join(" ")}
-          >
-            {r.stock_actual}
-          </span>
-        </td>
-
-        {/* Números más finos y alineados */}
-        <td className="px-5 py-3 text-right font-mono text-gray-800 tabular-nums">
-          {r.precio_venta_actual}
-        </td>
-        <td className="px-5 py-3 text-right font-mono text-gray-800 tabular-nums">
-          {r.costo_actual}
-        </td>
-
-        {/* Botones con separación extra */}
-        <td className="px-5 py-3">
-          <div className="flex gap-3 justify-end">
-            <button
-              className="h-9 rounded-md bg-gradient-to-r from-yellow-500 to-yellow-600 text-white px-3 text-[13px] font-medium 
-             hover:from-yellow-600 hover:to-yellow-700 shadow-sm transition-all active:scale-[0.97]"
-              onClick={() => abrirActualizar(r)}
-            >
-              Actualizar
-            </button>
-            <button
-              className="h-9 rounded-md border border-gray-300 px-3 text-[13px] font-medium hover:bg-gray-50 bg-white shadow-sm"
-              onClick={() => abrirHistorial(r)}
-            >
-              Historial
-            </button>
-          </div>
-        </td>
-      </tr>
-    ))}
-  </tbody>
-</table>
-
-            </div>
-          </section>
-
-          {/* PANEL HISTORIAL */}
-          <div className="relative w-full h-[30vh] min-h-[380px] 2xl:min-h-[420px]">
-            <div className="h-full rounded-2xl border border-transparent bg-transparent" />
-            <AnimatePresence initial={false}>
-              <motion.aside
-                key={histSel ? histSel.id_producto : "hist"}
-                layout={false}
-                className="absolute inset-0 rounded-2xl border border-gray-200
-  bg-gradient-to-b from-yellow-50 via-white to-white shadow-md
-  flex flex-col min-h-0"
-                initial={{ opacity: 0, x: 14 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 14 }}
-                transition={{ duration: 0.16, ease: "easeOut" }}
+          <tbody>
+            {rows.map((r) => (
+              <tr
+                key={r.id_producto}
+                className="border-b border-gray-100 hover:bg-yellow-50/30 transition-colors"
               >
-                <div className="border-b border-gray-200 px-5 py-4">
-                  <h3 className="text-base font-semibold text-gray-900">
-                    Historial {histSel ? `· ${histSel.nombre}` : ""}
-                  </h3>
-                  {!histSel && (
-                    <p className="text-sm text-gray-500">Elegí “Historial” en una fila para ver eventos.</p>
-                  )}
-                </div>
+                <td className="px-5 py-3 font-mono text-gray-800">{r.codigo}</td>
+                <td className="px-5 py-3 text-gray-800">{r.nombre}</td>
 
-                <div className="p-4 space-y-3 max-h-[60vh] overflow-auto">
-                  {loadingHist && <div className="text-base text-gray-500">Cargando…</div>}
-                  {!loadingHist && histSel && histEventos.length === 0 && (
-                    <div className="text-base text-gray-500">Sin eventos recientes.</div>
-                  )}
-                  {!loadingHist &&
-                    histEventos.map((ev, i) => (
-                      <motion.div
-                        key={i}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="flex items-start gap-2 rounded-lg border border-gray-100 p-2 hover:bg-gray-50"
-                      >
-                        <span
-                          className={`mt-0.5 inline-flex min-w-16 justify-center rounded-full px-2 py-0.5 text-xs font-medium ${ev.badgeClass}`}
-                        >
-                          {ev.t === "stock" ? "Stock" : "Precio"}
-                        </span>
-                        <div className="min-w-0">
-                          <div className="text-sm text-gray-500">{formatFecha(ev.fecha)}</div>
-                          <div
-                            className="text-base text-gray-800 truncate"
-                            dangerouslySetInnerHTML={{ __html: ev.desc }}
-                          />
-                        </div>
-                      </motion.div>
-                    ))}
-                </div>
-              </motion.aside>
-            </AnimatePresence>
+                <td className="px-5 py-3 text-center">
+                  <span
+                    className={[
+                      "inline-flex justify-center items-center rounded-full px-3 py-0.5 text-sm font-medium border shadow-sm transition-colors duration-200",
+                      r.stock_actual <= 0
+                        ? "bg-red-50 text-red-700 border-red-200"
+                        : r.stock_actual < 5
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-green-50 text-green-700 border-green-200",
+                    ].join(" ")}
+                  >
+                    {r.stock_actual}
+                  </span>
+                </td>
+
+                <td className="px-5 py-3 text-right font-mono text-gray-800 tabular-nums">
+                  {r.precio_venta_actual}
+                </td>
+                <td className="px-5 py-3 text-right font-mono text-gray-800 tabular-nums">
+                  {r.costo_actual}
+                </td>
+
+                <td className="px-5 py-3">
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      className="h-9 rounded-md bg-gradient-to-r from-blue-500 to-blue-600 text-white px-3 text-[13px] font-medium 
+                              hover:from-blue-600 hover:to-yellow-700 shadow-sm transition-all active:scale-[0.97]"
+                      onClick={() => abrirActualizar(r)}
+                    >
+                      Modificar
+                    </button>
+                    <button
+                      className="h-9 rounded-md border border-gray-300 px-3 text-[13px] font-medium hover:bg-gray-50 bg-white shadow-sm"
+                      onClick={() => abrirHistorial(r)}
+                    >
+                      Historial
+                    </button>
+                    <button
+                      className="h-9 rounded-md bg-red-600 text-white px-3 text-[13px] font-medium hover:bg-red-700 shadow-sm active:scale-[0.97] transition-all"
+                      onClick={() => abrirModalMerma(r)}
+                    >
+                      Pérdida
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {/* PANEL HISTORIAL */}
+    <div className="relative w-full h-[30vh] min-h-[380px] 2xl:min-h-[420px]">
+      <div className="h-full rounded-2xl border border-transparent bg-transparent" />
+      <AnimatePresence initial={false}>
+        <motion.aside
+          key={histSel ? histSel.id_producto : "hist"}
+          layout={false}
+          className="absolute inset-0 rounded-2xl border border-gray-200
+                    bg-gradient-to-b from-yellow-50 via-white to-white shadow-md
+                    flex flex-col min-h-0"
+          initial={{ opacity: 0, x: 14 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 14 }}
+          transition={{ duration: 0.16, ease: "easeOut" }}
+        >
+          <div className="border-b border-gray-200 px-5 py-4">
+            <h3 className="text-base font-semibold text-gray-900">
+              Historial {histSel ? `· ${histSel.nombre}` : ""}
+            </h3>
+            {!histSel && (
+              <p className="text-sm text-gray-500">Elegí “Historial” en una fila para ver eventos.</p>
+            )}
           </div>
+
+          <div className="p-4 space-y-3 max-h-[60vh] overflow-auto">
+            {loadingHist && <div className="text-base text-gray-500">Cargando…</div>}
+            {!loadingHist && histSel && histEventos.length === 0 && (
+              <div className="text-base text-gray-500">Sin eventos recientes.</div>
+            )}
+            {!loadingHist &&
+              histEventos.map((ev, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-start gap-2 rounded-lg border border-gray-100 p-2 hover:bg-gray-50"
+                >
+                  <span
+                    className={`mt-0.5 inline-flex min-w-16 justify-center rounded-full px-2 py-0.5 text-xs font-medium ${ev.badgeClass}`}
+                  >
+                    {ev.t === "stock" ? "Stock" : "Precio"}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-sm text-gray-500">{formatFecha(ev.fecha)}</div>
+                    <div
+                      className="text-base text-gray-800 truncate"
+                      dangerouslySetInnerHTML={{ __html: ev.desc }}
+                    />
+                  </div>
+                </motion.div>
+              ))}
+          </div>
+        </motion.aside>
+      </AnimatePresence>
+    </div>
+  </div>
+) : (
+  <StockPromosPanel />
+)}
+
+
+
+        {/*  Modal MERMA  */}
+        <ModalMerma
+          abierto={modalMermaAbierto}
+          onClose={cerrarModalMerma}
+          producto={productoSeleccionado}
+          onSuccess={handleMermaSuccess}
+        />
+        <CrearPromoComboModal
+          abierto={openPromo}
+          onCerrar={() => {
+            unlockBodyScroll();
+            setOpenPromo(false);
+          }}
+          productos={rows.map(r => ({
+            id_producto: r.id_producto,
+            nombre: r.nombre,
+            precio_venta_actual: r.precio_venta_actual,
+          }))}
+          onCreada={() => {
+
+          }}
+        />
+
+        {/*  Modal CONFIRM (custom)  */}
+<AnimatePresence>
+  {openConfirm && (
+    <motion.div
+      className="fixed inset-0 z-[60] grid place-items-center bg-black/50 p-4"
+      onClick={() => {
+        if (confirmBusy) return;
+        setOpenConfirm(false);
+      }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        className="w-[520px] max-w-[92vw] rounded-2xl border border-gray-200 bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 12, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        transition={{ duration: 0.16 }}
+      >
+        <div className="border-b border-gray-200 px-6 py-5">
+          <h3 className="text-lg font-semibold text-gray-900">{confirmTitle}</h3>
         </div>
 
-        {/* ===== Modal ACTUALIZAR ===== */}
-        <AnimatePresence>
-          {openAct && selAct && (
-            <motion.div
-              className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+        <div className="px-6 py-5">{confirmBody}</div>
+
+        <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
+          <button
+            className="h-10 rounded-lg border border-gray-300 bg-white px-4 text-base hover:bg-gray-50 disabled:opacity-50"
+            onClick={() => setOpenConfirm(false)}
+            disabled={confirmBusy}
+          >
+            Cancelar
+          </button>
+
+          <button
+            className={[
+              "h-10 rounded-lg px-5 text-base font-medium text-white disabled:opacity-50",
+              confirmDanger ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700",
+            ].join(" ")}
+            disabled={confirmBusy}
+            onClick={async () => {
+              if (!onConfirm) return;
+              try {
+                setConfirmBusy(true);
+                await onConfirm();
+                setOpenConfirm(false);
+              } catch (e) {
+                toast(String(e));
+              } finally {
+                setConfirmBusy(false);
+              }
+            }}
+          >
+            {confirmBusy ? "Procesando…" : "Aceptar"}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
+        {/* Modal ACTUALIZAR */}
+<AnimatePresence>
+  {openAct && selAct && (
+    <motion.div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        className="w-[620px] max-w-[92vw] rounded-2xl border border-gray-200 bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 12, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        transition={{ duration: 0.18 }}
+      >
+        <div className="border-b border-gray-200 px-6 py-5">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Actualizar: {selAct.nombre}{" "}
+            <span className="text-gray-500 font-medium">({selAct.codigo})</span>
+          </h3>
+        </div>
+
+        <div className="grid gap-4 px-6 py-5 text-base">
+          <label className="grid gap-1">
+            <span className="text-sm text-gray-600">¿Qué actualizar?</span>
+            <select
+              className="h-11 rounded-lg border border-gray-300 px-3"
+              value={accion}
+              onChange={(e) => setAccion(e.target.value as Accion)}
+            >
+              <option value="cantidad">Cantidad</option>
+              <option value="precio_venta">Precio de venta</option>
+              <option value="costo">Costo</option>
+              <option value="ambos">Cantidad y precios</option>
+            </select>
+          </label>
+
+          {(accion === "cantidad" || accion === "ambos") && (
+            <>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="grid gap-1">
+                  <span className="text-sm text-gray-600">Modo</span>
+                  <select
+                    className="h-11 rounded-lg border border-gray-300 px-3"
+                    value={modoCant}
+                    onChange={(e) => setModoCant(e.target.value as ModoCant)}
+                  >
+                    <option value="delta">Agregar / Quitar</option>
+                    <option value="fijar">Definir stock exacto</option>
+                  </select>
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-sm text-gray-600">
+                  {modoCant === "delta"
+                    ? "Cantidad a agregar o quitar"
+                    : `Nuevo stock (actual: ${selAct.stock_actual})`}
+                  </span>
+                  <input
+                    type="number"
+                    className="h-11 rounded-lg border border-gray-300 px-3"
+                    value={cantidad}
+                    onChange={(e) => setCantidad(Number(e.target.value))}
+                  />
+                </label>
+              </div>
+
+              <label className="grid gap-1">
+                <span className="text-sm text-gray-600">Nota (opcional)</span>
+                <input
+                  className="h-11 rounded-lg border border-gray-300 px-3"
+                  placeholder="Detalle, OC, etc."
+                  value={nota}
+                  onChange={(e) => setNota(e.target.value)}
+                />
+              </label>
+            </>
+          )}
+
+          {(accion === "precio_venta" || accion === "ambos") && (
+            <label className="grid gap-1">
+              <span className="text-sm text-gray-600">Precio de venta</span>
+              <input
+                type="number"
+                className="h-11 rounded-lg border border-gray-300 px-3"
+                value={precioVenta}
+                onChange={(e) => setPrecioVenta(Number(e.target.value))}
+                min={0}
+              />
+            </label>
+          )}
+
+          {(accion === "costo" || accion === "ambos") && (
+            <label className="grid gap-1">
+              <span className="text-sm text-gray-600">Costo</span>
+              <input
+                type="number"
+                className="h-11 rounded-lg border border-gray-300 px-3"
+                value={costo}
+                onChange={(e) => setCosto(Number(e.target.value))}
+                min={0}
+              />
+            </label>
+          )}
+        </div>
+
+        {/* FOOTER MODIFICADO */}
+        <div className="flex justify-between items-center border-t border-gray-200 px-6 py-4">
+          {/* ELIMINAR PRODUCTO */}
+          <button
+          className={[
+            "h-10 rounded-lg px-4 text-base font-medium active:scale-[0.97] disabled:opacity-50 text-white",
+            selAct.activo === 0
+              ? "bg-emerald-600 hover:bg-emerald-700"
+              : "bg-red-600 hover:bg-red-700",
+          ].join(" ")}
+          disabled={savingAct}
+          onClick={() => {
+            if (!selAct) return;
+
+            const estaInactivo = selAct.activo === 0;
+
+            abrirConfirm({
+              title: estaInactivo ? "¿Activar este producto?" : "¿Eliminar este producto?",
+              danger: !estaInactivo,
+              body: (
+                <div className="space-y-2 text-sm text-gray-700">
+                  <div>
+                    {estaInactivo
+                      ? "El producto volverá a estar disponible."
+                      : "Esto NO borra datos. Solo desactiva el producto."}
+                  </div>
+
+                  {!estaInactivo ? (
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>No se borra el historial</li>
+                      <li>No se eliminan ventas</li>
+                      <li>El producto deja de estar disponible</li>
+                    </ul>
+                  ) : (
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Vuelve a aparecer en el listado</li>
+                      <li>Vuelve a poder venderse (si tu buscador filtra por activos)</li>
+                    </ul>
+                  )}
+                </div>
+              ),
+              onOk: async () => {
+                if (!selAct) return;
+
+                await invoke("producto_set_activo", {
+                  input: {
+                    id_producto: selAct.id_producto,
+                    activo: estaInactivo, // si estaba inactivo -> true (activar); si estaba activo -> false (desactivar)
+                  },
+                });
+
+                setOpenAct(false);
+                unlockBodyScroll();
+                await cargar();
+                toast(estaInactivo ? "Producto activado." : "Producto desactivado.");
+              },
+            });
+          }}
+        >
+          {selAct.activo === 0 ? "Activar producto" : "Eliminar producto"}
+        </button>
+
+          {/* ACCIONES NORMALES */}
+          <div className="flex gap-2">
+            <button
+              className="h-10 rounded-lg border border-gray-300 bg-white px-4 text-base hover:bg-gray-50"
               onClick={() => {
                 unlockBodyScroll();
                 setOpenAct(false);
               }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
             >
-              <motion.div
-                className="w-[620px] max-w-[92vw] rounded-2xl border border-gray-200 bg-white shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
-                initial={{ opacity: 0, y: 12, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 12, scale: 0.98 }}
-                transition={{ duration: 0.18 }}
-              >
-                <div className="border-b border-gray-200 px-6 py-5">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Actualizar: {selAct.nombre} <span className="text-gray-500 font-medium">({selAct.codigo})</span>
-                  </h3>
-                </div>
+              Cancelar
+            </button>
+            <button
+              className="h-10 rounded-lg bg-blue-600 px-5 text-base font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              onClick={guardarActualizar}
+              disabled={savingAct}
+            >
+              {savingAct ? "Guardando…" : "Guardar"}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
+        
+        
 
-                <div className="grid gap-4 px-6 py-5 text-base">
-                  <label className="grid gap-1">
-                    <span className="text-sm text-gray-600">¿Qué actualizar?</span>
-                    <select
-                      className="h-11 rounded-lg border border-gray-300 px-3"
-                      value={accion}
-                      onChange={(e) => setAccion(e.target.value as Accion)}
-                    >
-                      <option value="cantidad">Cantidad</option>
-                      <option value="precio_venta">Precio de venta</option>
-                      <option value="costo">Costo</option>
-                      <option value="ambos">Cantidad y precios</option>
-                    </select>
-                  </label>
-
-                  {(accion === "cantidad" || accion === "ambos") && (
-                    <>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <label className="grid gap-1">
-                          <span className="text-sm text-gray-600">Modo</span>
-                          <select
-                            className="h-11 rounded-lg border border-gray-300 px-3"
-                            value={modoCant}
-                            onChange={(e) => setModoCant(e.target.value as ModoCant)}
-                          >
-                            <option value="delta">Delta (±)</option>
-                            <option value="fijar">Fijar absoluto</option>
-                          </select>
-                        </label>
-
-                        <label className="grid gap-1">
-                          <span className="text-sm text-gray-600">
-                            {modoCant === "delta" ? "Δ Cantidad" : `Nuevo stock (actual: ${selAct.stock_actual})`}
-                          </span>
-                          <input
-                            type="number"
-                            className="h-11 rounded-lg border border-gray-300 px-3"
-                            value={cantidad}
-                            onChange={(e) => setCantidad(Number(e.target.value))}
-                          />
-                        </label>
-                      </div>
-
-                      <label className="grid gap-1">
-                        <span className="text-sm text-gray-600">Nota (opcional)</span>
-                        <input
-                          className="h-11 rounded-lg border border-gray-300 px-3"
-                          placeholder="Detalle, OC, etc."
-                          value={nota}
-                          onChange={(e) => setNota(e.target.value)}
-                        />
-                      </label>
-                    </>
-                  )}
-
-                  {(accion === "precio_venta" || accion === "ambos") && (
-                    <label className="grid gap-1">
-                      <span className="text-sm text-gray-600">Precio de venta</span>
-                      <input
-                        type="number"
-                        className="h-11 rounded-lg border border-gray-300 px-3"
-                        value={precioVenta}
-                        onChange={(e) => setPrecioVenta(Number(e.target.value))}
-                        min={0}
-                      />
-                    </label>
-                  )}
-
-                  {(accion === "costo" || accion === "ambos") && (
-                    <label className="grid gap-1">
-                      <span className="text-sm text-gray-600">Costo</span>
-                      <input
-                        type="number"
-                        className="h-11 rounded-lg border border-gray-300 px-3"
-                        value={costo}
-                        onChange={(e) => setCosto(Number(e.target.value))}
-                        min={0}
-                      />
-                    </label>
-                  )}
-                </div>
-
-                <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
-                  <button
-                    className="h-10 rounded-lg border border-gray-300 bg-white px-4 text-base hover:bg-gray-50"
-                    onClick={() => {
-                      unlockBodyScroll();
-                      setOpenAct(false);
-                    }}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    className="h-10 rounded-lg bg-blue-600 px-5 text-base font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                    onClick={guardarActualizar}
-                    disabled={savingAct}
-                  >
-                    {savingAct ? "Guardando…" : "Guardar"}
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ===== Modal NUEVO PRODUCTO ===== */}
+        {/* Modal NUEVO PRODUCTO */}
         <AnimatePresence>
           {openNuevo && (
             <motion.div
@@ -791,10 +1130,9 @@ async function abrirHistorial(p: StockResumen) {
                       <input
                         type="number"
                         className="h-11 rounded-lg border border-gray-300 px-3"
-                        value={npPrecioVenta}
-                        onChange={(e) => setNpPrecioVenta(Number(e.target.value))}
-                        min={0}
-                      />
+                        value={npPrecioVentaTxt}
+                        onChange={(e) => setNpPrecioVentaTxt(e.target.value)}
+/>
                     </label>
 
                     <label className="grid gap-1">
@@ -802,24 +1140,68 @@ async function abrirHistorial(p: StockResumen) {
                       <input
                         type="number"
                         className="h-11 rounded-lg border border-gray-300 px-3"
-                        value={npCosto}
-                        onChange={(e) => setNpCosto(Number(e.target.value))}
-                        min={0}
-                      />
+                        value={npCostoTxt}
+                        onChange={(e) => setNpCostoTxt(e.target.value)}
+/>
                     </label>
 
                     <label className="grid gap-1">
                       <span className="text-sm text-gray-600">Stock inicial</span>
+
                       <input
-                        type="number"
-                        className="h-11 rounded-lg border border-gray-300 px-3"
-                        value={npStockIni}
-                        onChange={(e) => setNpStockIni(Number(e.target.value))}
-                        min={0}
-                      />
+                      type="number"
+                      className="h-11 rounded-lg border border-gray-300 px-3"
+                      value={npStockIniTxt}
+                      onChange={(e) => {
+                        // permitir borrar el 0
+                        setNpStockIniTxt(e.target.value);
+                      }}
+                    />
                     </label>
                   </div>
                 </div>
+
+                <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50/40 p-4">
+                  <div className="text-sm font-semibold text-gray-800">Reposición</div>
+
+                  <div className="mt-3 flex items-center gap-6">
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="radio"
+                        name="npReposicionModo"
+                        value="unitario"
+                        checked={npReposicionModo === "unitario"}
+                        onChange={() => setNpReposicionModo("unitario")}
+                      />
+                      Unitario
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="radio"
+                        name="npReposicionModo"
+                            value="cajon"
+                            checked={npReposicionModo === "cajon"}
+                            onChange={() => setNpReposicionModo("cajon")}
+                          />
+                          Cajones
+                        </label>
+                      </div>
+
+                      {npReposicionModo === "cajon" && (
+                        <div className="mt-3 grid gap-1">
+                          <span className="text-xs text-gray-600">Unidades por cajón</span>
+                          <input
+                            type="number"
+                            min={1}
+                            className="h-11 w-40 rounded-lg border border-gray-300 px-3"
+                            value={npReposicionFactor}
+                            onChange={(e) => setNpReposicionFactor(Number(e.target.value || 12))}
+                          />
+                          <div className="text-xs text-gray-500">Ej: 12 maples por cajón</div>
+                        </div>
+                      )}
+                    </div>
 
                 <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
                   <button
@@ -852,6 +1234,136 @@ async function abrirHistorial(p: StockResumen) {
       </motion.main>
     </div>
   );
+  
+  function StockPromosPanel() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [combos, setCombos] = useState<any[]>([]);
+
+  const recargar = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await invoke<any[]>("promo_combo_listar", { soloActivos: true });
+      setCombos(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      setError(String(e?.message ?? e));
+      setCombos([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    recargar();
+  }, []);
+
+    useEffect(() => {
+  if (!openAct) return;
+
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      unlockBodyScroll();
+      setOpenAct(false);
+    }
+  };
+
+  window.addEventListener("keydown", onKey);
+  return () => window.removeEventListener("keydown", onKey);
+}, [openAct]);
+
+const eliminar = (idCombo: number) => {
+  abrirConfirm({
+    title: "¿Eliminar este combo?",
+    danger: true,
+    body: (
+      <div className="space-y-2 text-sm text-gray-700">
+        <div>Esto desactiva la promoción.</div>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>No borra historial</li>
+          <li>No elimina ventas</li>
+          <li>Deja de estar disponible</li>
+        </ul>
+      </div>
+    ),
+    onOk: async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        await invoke("promo_combo_eliminar", { idCombo });
+        await recargar();
+        toast("Combo eliminado.");
+      } catch (e: any) {
+        setError(String(e?.message ?? e));
+        throw e; // para que el modal pueda mostrar toast si querés
+      } finally {
+        setLoading(false);
+      }
+    },
+  });
+};
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[1fr_440px] 2xl:grid-cols-[1fr_520px] items-start">
+      <section className="rounded-2xl border border-gray-200 bg-white shadow-md p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-semibold text-gray-900">Promociones</div>
+          <button
+            className="h-10 rounded-lg border border-gray-300 bg-white/80 px-4 text-base hover:bg-white shadow-sm disabled:opacity-60"
+            onClick={recargar}
+            disabled={loading}
+          >
+            {loading ? "Cargando…" : "Refrescar"}
+          </button>
+        </div>
+
+        {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
+
+        <div className="space-y-2">
+          {combos.map((c) => (
+            <div
+              key={c.id_combo}
+              className="group relative rounded-lg border border-gray-200 bg-white p-3 hover:bg-gray-50"
+            >
+              <div className="font-medium text-gray-900">{c.nombre}</div>
+
+              {c.resumen && (
+                <div className="mt-1 text-xs text-gray-500 truncate">{c.resumen}</div>
+              )}
+
+              <div className="mt-1 text-sm text-gray-700">
+                Precio: ${Number(c.precio_pack).toLocaleString("es-AR")}
+              </div>
+
+              <button
+                className="
+                  absolute right-3 top-3
+                  rounded-md bg-gray-900 px-2 py-1 text-xs text-white hover:bg-black
+                  opacity-0 pointer-events-none
+                  group-hover:opacity-100 group-hover:pointer-events-auto
+                  group-focus-within:opacity-100 group-focus-within:pointer-events-auto
+                  disabled:opacity-50
+                "
+                onClick={() => eliminar(c.id_combo)}
+                disabled={loading}
+                title="Desactivar combo"
+              >
+                Eliminar
+              </button>
+            </div>
+          ))}
+
+          {!loading && combos.length === 0 && (
+            <div className="text-sm text-gray-500">No hay promociones activas.</div>
+          )}
+        </div>
+      </section>
+
+      
+    </div>
+  );
+}
+
 }
 
 

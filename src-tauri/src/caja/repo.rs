@@ -28,21 +28,43 @@ pub async fn ultima_caja_abierta_id(pool: &SqlitePool) -> Result<Option<i64>, sq
 }
 
 pub async fn cerrar_caja(pool: &SqlitePool, id_caja: i64, _user_id: i64) -> Result<(), sqlx::Error> {
-    // Cerrar SIN escribir 'cerrada_por' (columna no existe en tu DB actual)
-    sqlx::query(
+    let hay_venta_en_curso: i64 = sqlx::query_scalar(
+        "SELECT EXISTS(
+            SELECT 1
+            FROM venta
+            WHERE estado = 'en_curso'
+            LIMIT 1
+        );"
+    )
+    .fetch_one(pool)
+    .await?;
+
+    if hay_venta_en_curso == 1 {
+        return Err(sqlx::Error::Protocol(
+            "No se puede cerrar caja: hay una venta en curso.".into()
+        ));
+    }
+
+    let res = sqlx::query(
         "UPDATE caja
-                SET estado='cerrada',
-                    cerrada_en=DATETIME('now','localtime')
-                WHERE id_caja=?1 AND estado='abierta';"
+            SET estado='cerrada',
+                cerrada_en=DATETIME('now','localtime')
+          WHERE id_caja=?1 AND estado='abierta';"
     )
     .bind(id_caja)
-    .execute(pool).await?;
+    .execute(pool)
+    .await?;
+
+    if res.rows_affected() == 0 {
+        return Err(sqlx::Error::Protocol(
+            "No se cerró la caja (no existe o ya estaba cerrada).".into()
+        ));
+    }
+
     Ok(())
 }
 
-/// (Opcional) obtener una caja ya persistida
 pub async fn obtener_caja(pool: &SqlitePool, id_caja: i64) -> Result<Option<Caja>, sqlx::Error> {
-    // No selecciones 'cerrada_por' para evitar error de columna inexistente
     let row = sqlx::query(
         "SELECT id_caja, abierta_por, abierta_en, estado, cerrada_en
            FROM caja
@@ -59,7 +81,6 @@ pub async fn obtener_caja(pool: &SqlitePool, id_caja: i64) -> Result<Option<Caja
             "abierta" => EstadoCaja::Abierta,
             _ => EstadoCaja::Cerrada,
         },
-        // Como la columna no existe, forzamos None para mantener compatibilidad del modelo
         cerrada_por: None,
         cerrada_en: r.try_get("cerrada_en").ok(),
     }))
