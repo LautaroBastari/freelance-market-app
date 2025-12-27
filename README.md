@@ -1,5 +1,5 @@
 # Sistema Desktop de Ventas, Stock y Caja
-
+Freelance
 Aplicación de **escritorio** para comercios minoristas, diseñada para operar **offline**, con módulos integrados de **ventas**, **stock** y **caja**.  
 El sistema persiste toda la información localmente y mantiene historial completo de operaciones para control y auditoría.
 
