@@ -1,58 +1,144 @@
-# Freelance Market App
+# Sistema Desktop de Ventas, Stock y Caja
 
-Sistema de gestión de ventas, stock y caja para comercios minoristas.
-Aplicación de escritorio offline-first orientada a pequeños y medianos negocios.
+Aplicación de **escritorio** para comercios minoristas, diseñada para operar **offline**, con módulos integrados de **ventas**, **stock** y **caja**.  
+El sistema persiste toda la información localmente y mantiene historial completo de operaciones para control y auditoría.
 
-## Descripción
+---
 
-El sistema permite registrar ventas, controlar el stock y gestionar la caja diaria
-de forma local, sin dependencia de conexión a internet, priorizando simplicidad
-operativa, trazabilidad de movimientos y consistencia contable.
+## Problema que resuelve
 
-Está diseñado para entornos donde se requiere rapidez en la operación diaria y
-una lectura clara del resultado económico del negocio.
+En muchos comercios pequeños y medianos es habitual:
+- Registrar ventas de forma manual o en planillas
+- Tener desfasajes entre el stock real y el registrado
+- No contar con cierres de caja claros ni horarios consistentes
+- No poder reconstruir qué ocurrió ante errores o faltantes
+
+Este sistema centraliza la operación diaria y asegura que:
+- Cada venta impacte directamente en el stock
+- La caja quede registrada con apertura y cierre por jornada
+- Todas las operaciones queden guardadas para su posterior análisis
+
+---
 
 ## Funcionalidades
 
-- Sistema de autenticación con usuarios y roles (administrador / operador)
-- Gestión de productos y control de stock
-- Registro de ventas con actualización automática de stock
-- Apertura y cierre de caja con control de movimientos
-- Control de ingresos y egresos diarios
-- Reportes diarios, mensuales y por período
-- Cálculo de costos, márgenes y rentabilidad
-- Gestión de gastos y sueldos
+### Ventas
+- Registro de ventas con detalle por producto
+- Cálculo automático de totales
+- Descuento de stock por cada ítem vendido
+- Persistencia de la venta y su detalle para auditoría
 
-## Lógica del sistema
+### Stock
+- Alta y edición de productos
+- Visualización de stock actual
+- Registro de movimientos (mermas, ajustes)
+- Base para reportes de inventario e históricos
 
-- El stock se actualiza automáticamente al registrar una venta.
-- El costo de cada producto se guarda como snapshot al momento de la venta.
-- El resultado del negocio se calcula a partir de ventas, costos y gastos.
-- La caja registra los movimientos asociados a cada jornada.
-- Los reportes distinguen entre flujo de caja y rentabilidad real.
+### Caja
+- Apertura y cierre de caja con timestamps
+- Asociación de movimientos a cada jornada
+- Estructura preparada para reportes diarios y por rango
 
-## Stack tecnológico
+### Usuarios y roles
+- Inicio de sesión y registro
+- Roles diferenciados (admin / operador)
+- Acceso a vistas según rol
 
-- Backend: Rust + Tauri
-- Frontend: React + TypeScript + Tailwind CSS
-- Base de datos: SQLite (SQLx)
+---
+
+## Tecnologías y arquitectura
+
+- **Frontend:** React + TypeScript + Tailwind CSS  
+- **Desktop:** Tauri  
+- **Backend:** Rust (comandos Tauri)  
+- **Base de datos:** SQLite  
+- **Acceso a datos:** SQLx + migraciones
+
+La elección de SQLite permite una aplicación liviana, confiable y completamente offline, adecuada para el uso diario en entornos de escritorio.
+
+---
+
+## Modelo de datos (resumen)
+
+Tablas principales:
+- `usuario`: credenciales y rol
+- `producto`: catálogo de productos
+- `caja`: aperturas y cierres por jornada
+- `venta`: cabecera de la operación
+- `venta_detalle`: productos, cantidades y datos asociados a la venta
+
+El esquema separa cabecera y detalle para mantener trazabilidad y facilitar reportes posteriores.
+
+---
+
+## Flujo de una venta
+
+1. El operador inicia sesión
+2. Selecciona productos y cantidades
+3. Se validan los datos ingresados
+4. Se registra la venta
+5. Se registran los ítems de la venta
+6. Se actualiza el stock de cada producto
+7. La operación queda persistida
+
+Las operaciones críticas están pensadas para ejecutarse de forma atómica, evitando inconsistencias entre ventas y stock.
+
+---
+
+## Estructura del repositorio
+
+- `src/` → frontend (React / TypeScript)
+- `src-tauri/` → backend en Rust y comandos Tauri
+- `src-tauri/migrations/` → migraciones SQL
+- `docs/screenshots/` → capturas del sistema
+
+---
+
+## Capturas
+
+- Login: `docs/screenshots/01_login.PNG`
+- Ventas: `docs/screenshots/02_venta.png`
+- Stock: `docs/screenshots/03_stock.png`
+- Panel / resultados: `docs/screenshots/04_pnl.png`
+- Ganancias: `docs/screenshots/05_ganancias.png`
+- Caja: `docs/screenshots/06_cajas.PNG`
+
+Ejemplo:
+
+![Login](docs/screenshots/01_login.PNG)  
+![Ventas](docs/screenshots/02_venta.png)  
+![Stock](docs/screenshots/03_stock.png)
+
+---
+
+## Ejecución en desarrollo
+
+### Requisitos
+- Node.js
+- Rust toolchain
+- Tauri CLI
+- SQLx CLI (opcional, para manejo manual de migraciones)
+
+### Pasos generales
+1. Instalar dependencias del frontend
+2. Ejecutar la aplicación en modo desarrollo con Tauri
+3. La base de datos se inicializa y migra según la configuración del proyecto
+
+> En entornos Windows, la base de datos se ubica en el directorio de datos de la aplicación (`AppData/Roaming/...`).
+
+---
 
 ## Estado del proyecto
 
-Sistema finalizado y en uso en un comercio real.  
-Actualmente se encuentra en operación diaria y mantenimiento evolutivo.
+-  Autenticación y roles
+-  Persistencia base (ventas y stock)
+-  Interfaz de ventas, stock y caja
+-  Consolidación de caja y transacciones completas
+-  Reportes avanzados de stock (rentabilidad y reposicion), ventas, costos, gastos, ganancias y rentabilidad del negocio.
 
-## Capturas de pantalla
+---
 
-![Login](docs/screenshots/01_login.png)
-![Ventas](docs/screenshots/02_venta.png)
-![Stock](docs/screenshots/03_stock.png)
-![Resultados (PnL)](docs/screenshots/04_pnl.png)
-![Ganancias](docs/screenshots/05_ganancias.png)
-![Caja](docs/screenshots/06_cajas.png)
+## Autor
 
-## Nota
-
-Las capturas y los datos mostrados corresponden a un entorno de demostración.
-El autor cuenta con autorización expresa del cliente para mostrar el sistema
-con fines ilustrativos y de portfolio.
+Lautaro Bastari  
+GitHub: https://github.com/LautaroBastari
