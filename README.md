@@ -96,20 +96,21 @@ Las operaciones críticas están pensadas para ejecutarse de forma atómica, evi
 
 ## Capturas
 
-- Login: `docs/screenshots/01_login.PNG`
+- Login: `docs/screenshots/01_login.png`
 - Ventas: `docs/screenshots/02_venta.png`
 - Stock: `docs/screenshots/03_stock.png`
 - Panel / resultados: `docs/screenshots/04_pnl.png`
 - Ganancias: `docs/screenshots/05_ganancias.png`
-- Caja: `docs/screenshots/06_cajas.PNG`
+- Caja: `docs/screenshots/06_cajas.png`
 
 Ejemplo:
 
-![Login](docs/screenshots/01_login.PNG)  
+![Login](docs/screenshots/01_login.png)  
 ![Ventas](docs/screenshots/02_venta.png)  
-![Stock](docs/screenshots/03_stock.png)
-
----
+![Stock](docs/screenshots/03_stock.png)  
+![Resultados (PnL)](docs/screenshots/04_pnl.png)  
+![Ganancias](docs/screenshots/05_ganancias.png)  
+![Caja](docs/screenshots/06_cajas.png)
 
 ## Ejecución en desarrollo
 
