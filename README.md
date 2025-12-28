@@ -45,7 +45,7 @@ Este sistema centraliza la operación diaria y asegura que:
 - Roles diferenciados (admin / operador)
 - Acceso a vistas según rol
 
-###Reportes
+### Reportes
 - Hacer operaciones necesarias para obtener el rendimiento tanto de las ventas como del negocio total
 
 ---
