@@ -12,6 +12,7 @@ En muchos comercios pequeños y medianos es habitual:
 - Tener desfasajes entre el stock real y el registrado
 - No contar con cierres de caja claros ni horarios consistentes
 - No poder reconstruir qué ocurrió ante errores o faltantes
+- Poder llevar de manera automatizada la rentabilidad del negocio
 
 Este sistema centraliza la operación diaria y asegura que:
 - Cada venta impacte directamente en el stock
@@ -43,6 +44,9 @@ Este sistema centraliza la operación diaria y asegura que:
 - Inicio de sesión y registro
 - Roles diferenciados (admin / operador)
 - Acceso a vistas según rol
+
+###Reportes
+- Hacer operaciones necesarias para obtener el rendimiento tanto de las ventas como del negocio total
 
 ---
 
